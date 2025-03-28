@@ -22,7 +22,7 @@ import numpy as np
 
 from VISOR import __version__
 
-barcodepath=os.path.abspath(os.path.dirname(__file__) + '/4M-with-alts-february-2016.txt.gz')
+#barcodepath=os.path.abspath(os.path.dirname(__file__) + '/4M-with-alts-february-2016.txt.gz')
 
 class c():
 
@@ -55,10 +55,11 @@ class c():
 	threads=0
 
 	#molecules
-
+	barcodepath=os.path.abspath(os.path.dirname(__file__) + '/4M-with-alts-february-2016.txt.gz')
 	molnum=0
 	mollen=0
 	molcov=0
+	barcodebp = 0
 	barcodes=[]
 
 
@@ -262,7 +263,7 @@ def Gzipper(sli,):
 def MolSim(processor,molecule,hfa,w,c):
 
 	'''
-	Parallelize 10X linked reads simulation
+	Parallelize linked reads simulation
 	'''
 
 	for mol in molecule:
@@ -293,7 +294,24 @@ def MolSim(processor,molecule,hfa,w,c):
 			R1tmp=os.path.abspath(c.OUT+'/' + processor + '.R1.tmp.fq')
 			R2=os.path.abspath(c.OUT+'/' + processor + '.R2.fq')
 
-			wgsim.core(r1=R1tmp, r2=R2, ref=molfa, err_rate=c.error, mut_rate=c.mutation, indel_frac=c.indels, indel_ext=c.extindels, N=N, dist=c.distance, stdev=c.stdev, size_l=c.length-22, size_r=c.length,max_n=0.05, is_hap=0,  is_fixed=0, seed=0)
+			wgsim.core(
+				r1 = R1tmp,
+				r2 =R2,
+				ref = molfa,
+				err_rate = c.error,
+				mut_rate = c.mutation,
+				indel_frac = c.indels,
+				indel_ext = c.extindels,
+				N = N,
+				dist = c.distance,
+				stdev = c.stdev,
+				size_l = c.length - (c.barcodebp + 6),
+				size_r = c.length,
+				max_n = 0.05,
+				is_hap = 0,
+				is_fixed = 0,
+				seed = 0
+			)
 
 			os.remove(molfa)
 			RANDOM6MER=''.join(np.random.choice(['A','T','G','C','N'],6, replace=True))
@@ -329,21 +347,18 @@ def MolSim(processor,molecule,hfa,w,c):
 def LinkedSim(w,c):
 
 	'''
-	Perform 10X linked-reads simulation
+	Perform linked-reads simulation
 
 	'''
 
 	hfa=pyfaidx.Fasta(c.ffile)
 
 	if w.chrom not in hfa.keys():
-
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Warning] Chromosome ' + w.chrom + ' not found in ' + c.ffile + '. Skipped simulation')
-
+		print(f'[{now}][Warning] Chromosome  {w.chrom} not found in {c.ffile}. Skipped simulation')
 	else:
-
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Message] Preparing simulation from ' + c.ffile + '. Haplotype ' + str(c.hapnumber))
+		print(f'[{now}][Message] Preparing simulation from {c.ffile}. Haplotype {c.hapnumber}')
 
 		chr_= hfa[w.chrom]
 		seq_ = chr_[w.start-1:w.end].seq
@@ -357,38 +372,37 @@ def LinkedSim(w,c):
 		Ns=seq_.count('N') #normalize coverage on Ns
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Message] Number of available barcodes: ' + str(len(c.barcodes)))
+		print(f'[{now}][Message] Number of available barcodes: {len(c.barcodes)}')
 
 		MRPM=(c.molcov*c.mollen)/(c.length*2)
 		TOTALR=round(((c.regioncoverage*(len(seq_)-Ns))/c.length)/2)
 		EXPM=round(TOTALR/MRPM)
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Message] Average number of paired reads per molecule: ' + str(MRPM))
-		print('[' + now + '][Message] Number of reads required to get the expected coverage: ' + str(TOTALR))
-		print('[' + now + '][Message] Expected number of molecules: ' + str(EXPM))
+		print(f'[{now}][Message] Average number of paired reads per molecule: {MRPM}')
+		print(f'[{now}][Message] Number of reads required to get the expected coverage: {TOTALR}')
+		print(f'[{now}][Message] Expected number of molecules: {EXPM}')
 
 		molecules=randomlong(c,seq_,EXPM) #MolSet
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Message] Molecules generated: ' + str(len(molecules)))
+		print(f'[{now}][Message] Molecules generated: {len(molecules)}')
 
 		drop=deternumdroplet(molecules,c.molnum)
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Message] Assigned molecules to: ' + str(len(drop)) + ' GEMs')
+		print(f'[{now}][Message] Assigned molecules to: {len(drop)} partitions')
 
 		droplet_container,assigned_barcodes=selectbarcode(drop,molecules,c)
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Message] Assigned a unique barcode to each molecule')
-		print('[' + now + '][Message] Assigned a barcode to each molecule')
+		print(f'[{now}][Message] Assigned a unique barcode to each molecule')
 		
 		c.barcodes=[x for x in c.barcodes if x not in assigned_barcodes]
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Message] ' + str(len(c.barcodes)) + ' barcodes left')
-		print('[' + now + '][Message] Simulating')
+		print(f'[{now}][Message] {len(c.barcodes)} barcodes left')
+		print(f'[{now}][Message] Simulating')
 
 		chunk_size=len(molecules)/c.threads
 		slices=Chunks(molecules,math.ceil(chunk_size))
@@ -397,7 +411,7 @@ def LinkedSim(w,c):
 
 		for i,molecule in enumerate(slices):
 
-			processor='p'+str(i+1)
+			processor=f'p{i+1}'
 			p=multiprocessing.Process(target=MolSim, args=(processor,molecule,hfa,w,c))
 			p.start()
 			processes.append(p)
@@ -416,7 +430,7 @@ def run(parser,args):
 	redirect_stdout()# block pywgsim stdout
 
 	now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-	print('[' + now + '][Message][BETA] VISOR XENIA v' + __version__)
+	print(f'[{now}][Message][BETA] VISOR XENIA v{__version__}')
 
 	#fill container
 
@@ -434,7 +448,7 @@ def run(parser,args):
 		except:
 
 			now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-			print('[' + now + '][Error] Cannot create the output folder')
+			print(f'[{now}][Error] Cannot create the output folder')
 			sys.exit(1)
 
 	else:
@@ -442,20 +456,20 @@ def run(parser,args):
 		if not os.access(os.path.abspath(c.OUT),os.W_OK):
 
 			now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-			print('[' + now + '][Error] Missing write permissions on the output folder')
+			print(f'[{now}][Error] Missing write permissions on the output folder')
 			sys.exit(1)
 			
 		elif os.listdir(os.path.abspath(c.OUT)):
 
 			now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-			print('[' + now + '][Error] The output folder is not empty: specify another output folder or clean the current one')
+			print(f'[{now}][Error] The output folder is not empty: specify another output folder or clean the current one')
 			sys.exit(1)
 
 
 	if which('bedtools') is None:
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Error] bedtools must be in PATH')
+		print(f'[{now}][Error] bedtools must be in PATH')
 		sys.exit(1)
 
 	try:
@@ -466,7 +480,7 @@ def run(parser,args):
 	except:
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Error] BED ' + c.BED + ' does not exist, is not readable or is not a valid BED')
+		print(f'[{now}][Error] BED {c.BED} does not exist, is not readable, or is not a valid BED')
 		sys.exit(1)
 
 	#fill c with wgsim parameters for simulations 
@@ -482,42 +496,61 @@ def run(parser,args):
 	c.molnum=args.molecule_number
 	c.mollen=args.molecule_length
 	c.molcov=args.molecule_coverage
+	if args.barcode:
+		c.barcodepath = args.barcodes
 
 	try:
 
-		with gzip.open(barcodepath, 'rt') as filein:
-
+		with gzip.open(c.barcodepath, 'rt') as filein:
 			c.barcodes = filein.read().splitlines()
+		# validate barcodes are all the same length
+		bc_lens = set()
+		for i in c.barcodes:
+			bc_lens.add(len(i))
+			if len(bc_lens) > 1:
+				now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+				print(f'[{now}][Error] Barcodes in {c.barcodepath} must all the same length.')
+				sys.exit(1)
+		else:
+			c.barcodebp = next(iter(bc_lens))
+		# validate barcodes are only ATCGU nucleotides
+		for bc in c.barcodes:
+			if not bool(re.fullmatch(r'^[ATCGU]+$', bc), flags = re.IGNORECASE):
+				now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+				print(f'[{now}][Error] Barcodes can only contain nucleotides A,T,C,G,U, but invalid barcode(s) provided: {bc}. This was first invalid barcode identified, but it may not be the only one.')
+				sys.exit(1)
 
 	except:
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Error] Cannot open ' + barcodepath + ' for reading')
+		print(f'[{now}][Error] Cannot open {c.barcodepath} for reading')
 		sys.exit(1)
 
 	now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-	print('[' + now + '][Message] Preparing for bulk simulations with a single clone') #maybe we want to add more here in the future. 
-
-	c.ffiles=sorted(glob.glob(os.path.abspath(c.SAMPLE) + '/*.fa'), key=natural_keys) #list all FASTA in folder
+	print(f'[{now}][Message] Preparing for bulk simulations with a single clone') #maybe we want to add more here in the future. 
+	fasta_files = [
+    	f for f in glob.glob(f'{os.path.abspath(c.SAMPLE)}/*') 
+    	if re.search(r'\.(fa|fasta)$', f, re.IGNORECASE)
+	]
+	c.ffiles=sorted(fasta_files, key=natural_keys) #list all FASTA in folder
 	c.regioncoverage=c.coverage/len(c.ffiles)
 
 	for k,s in enumerate(c.ffiles):
-
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print('[' + now + '][Message] Processing haplotype ' + str(k+1))
+		print(f'[{now}][Message] Processing haplotype {k+1}')
 		c.hapnumber=str(k+1)
 		c.ffile=c.ffiles[k]
 
 		for w in bedsrtd: #do not use multi-processing on this as minimap2 may require too much memory
 
 			now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-			print('[' + now + '][Message] Simulating from region ' + w.chrom + ':' + str(w.start) + '-' + str(w.end))
+			print(f'[{now}][Message] Simulating from region {w.chrom}:{w.start}-{w.end}')
 			LinkedSim(w,c)
 
 	allfastq=glob.glob(os.path.abspath(c.OUT) + '/*.fastq')
 
 	now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-	print('[' + now + '][Message] Compressing FASTQ')
+	print(f'[{now}][Message] Compressing FASTQ')
 
 	#gzip multiprocessing
 
@@ -536,4 +569,4 @@ def run(parser,args):
 		p.join()
 
 	now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-	print('[' + now + '][Message] Done')
+	print(f'[{now}][Message] Done')
