@@ -1,5 +1,6 @@
 #!/usr/bin/python3 env
 
+import os
 import sys
 import argparse
 from argparse import HelpFormatter
@@ -8,6 +9,9 @@ from datetime import datetime
 from VISOR import __version__
 
 #v1.0->v1.1 added logo
+
+def barcodefile(path):
+	return os.path.abspath(path)
 
 def main():
 
@@ -173,8 +177,8 @@ def main():
 	wgsim.add_argument('--extindels', help='indels extension rate [0.25]', metavar='', default=0.25, type=float)
 
 	molecules=parser_linkedreads.add_argument_group('Linked-read simulation')
-
-	molecules.add_argument('--barcodes', help='file of barcodes to simulate, one per line [10X default barcodes]', metavar='FILE', type=str)
+	bc_default = os.path.abspath(os.path.dirname(__file__) + '/XENIA/4M-with-alts-february-2016.txt.gz')
+	molecules.add_argument('--barcodes', help='file of barcodes to simulate, one per line [10X default barcodes]', metavar='FILE', default = bc_default, type=barcodefile)
 	molecules.add_argument('--molecule_length', help='mean length of molecules [80000]', metavar='', default=80000, type=int)
 	molecules.add_argument('--molecule_number', help='number of fragments per barcode on average [10]', metavar='', default=10, type=int)
 	molecules.add_argument('--molecule_coverage', help='mean coverage per molecule [0.2]', metavar='', default=0.2, type=float)

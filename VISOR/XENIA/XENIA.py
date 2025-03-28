@@ -55,7 +55,7 @@ class c():
 	threads=0
 
 	#molecules
-	barcodepath=os.path.abspath(os.path.dirname(__file__) + '/4M-with-alts-february-2016.txt.gz')
+	barcodepath=""
 	molnum=0
 	mollen=0
 	molcov=0
@@ -450,7 +450,7 @@ def run(parser,args):
 		elif os.listdir(os.path.abspath(c.OUT)):
 
 			now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-			print(f'[{now}][Error] The output folder is not empty: specify another output folder or clean the current one', file = sys.stderr)
+			print(f'[{now}][Error] The output folder is not empty: specify another output folder or clean the current one ({c.OUT})', file = sys.stderr)
 			sys.exit(1)
 
 
@@ -484,8 +484,9 @@ def run(parser,args):
 	c.molnum=args.molecule_number
 	c.mollen=args.molecule_length
 	c.molcov=args.molecule_coverage
-	if args.barcodes:
-		c.barcodepath = os.path.abspath(args.barcodes)
+	c.barcodepath = args.barcodes
+	#if args.barcodes:
+	#	c.barcodepath = os.path.abspath(args.barcodes)
 	fasta_files = [
     	f for f in glob.glob(f'{os.path.abspath(c.SAMPLE)}/*') 
     	if re.search(r'\.(fa|fasta)$', f, re.IGNORECASE)
