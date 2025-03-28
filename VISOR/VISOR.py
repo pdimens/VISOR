@@ -28,7 +28,7 @@ def main():
 	required = parser_hack.add_argument_group('Required I/O arguments')
 
 	required.add_argument('-g','--genome', help='reference genome in FASTA format', metavar='FASTA', required=True)
-	required.add_argument('-b', '--bedfile', help='one ore more variant file in BED-like format (one for each haplotype), as specified in https://davidebolo1993.github.io/visordoc/usage/usage.html#hack-bed', metavar='BED', nargs='+', action='append', required=True)
+	required.add_argument('-b', '--bedfile', help='one or more variant file in BED-like format (one for each haplotype), as specified in https://davidebolo1993.github.io/visordoc/usage/usage.html#hack-bed', metavar='BED', nargs='+', action='append', required=True)
 	required.add_argument('-o', '--output', help='output folder with FASTA haplotypes', metavar='FOLDER', required=True)
 
 	#this won't be used yet. This is just for future reference and implementation (Store a VCF with variants inserted)
