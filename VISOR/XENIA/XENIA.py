@@ -60,7 +60,7 @@ class c():
 	mollen=0
 	molcov=0
 	barcodebp = 0
-	barcodes=[]
+	barcodes=set()
 
 
 class Molecule(object):
@@ -230,16 +230,16 @@ def selectbarcode(drop,molecules,c):
 		totalseqlen=0
 		temp=[]
 		start=start+num_molecule_per_partition
-	
+		bc = c.barcodes.pop()
 		for j in range(num_molecule_per_partition):
 						
 			index=index_molecule[j]
 			temp.append(index)
 			molecules[index].index_droplet=i
-			molecules[index].barcode=c.barcodes[i]
+			molecules[index].barcode=bc
 			totalseqlen=totalseqlen+molecules[index].length
 		
-		assigned_barcodes.add(c.barcodes[i])
+		assigned_barcodes.add(bc)
 		droplet_container.append(temp)
 
 	return droplet_container, assigned_barcodes
@@ -252,11 +252,8 @@ def Gzipper(sli,):
 	'''
 
 	for s in sli:
-
-		with open(s, 'rb') as textin, gzip.open(s+'.gz', 'wb') as gzout:
-
+		with open(s, 'rb') as textin, gzip.open(s+'.gz', 'wb', compresslevel=6) as gzout:
 			gzout.writelines(textin)
-
 		os.remove(s)
 
 
@@ -284,11 +281,9 @@ def MolSim(processor,molecule,hfa,w,c):
 		R2A=os.path.abspath(c.OUT + '/SIM_S1_L' + str(c.hapnumber).zfill(3) + '_R2_001.fastq')
 		
 		if N != 0:
-
 			molfa=os.path.abspath(c.OUT+'/' + processor + '_' + moleculenumber + '.fa')
 
 			with open(molfa, 'w') as faout:
-
 				faout.write('>' + header + '\n' + '\n'.join(re.findall('.{1,60}', seq__)) + '\n')
 
 			R1tmp=os.path.abspath(c.OUT+'/' + processor + '.R1.tmp.fq')
@@ -305,7 +300,7 @@ def MolSim(processor,molecule,hfa,w,c):
 				N = N,
 				dist = c.distance,
 				stdev = c.stdev,
-				size_l = c.length - (c.barcodebp + 6),
+				size_l = c.length - (c.barcodebp), # (c.barcodebp + 6) if using random 6mer
 				size_r = c.length,
 				max_n = 0.05,
 				is_hap = 0,
@@ -314,33 +309,25 @@ def MolSim(processor,molecule,hfa,w,c):
 			)
 
 			os.remove(molfa)
-			RANDOM6MER=''.join(np.random.choice(['A','T','G','C','N'],6, replace=True))
+			#RANDOM6MER=''.join(np.random.choice(['A','T','G','C','N'],6, replace=True))
 
 			if os.stat(R1tmp).st_size == 0:
-
 				os.remove(R1tmp)
 				os.remove(R2)
 
 			else:
 
 				with open(R1tmp,'r') as infile, open(R1A,'a') as outfile:
-
 					for name,seq,qual in readfq(infile):
-
-						read=['@'+name,barcodestring + RANDOM6MER+seq, '+', str(qual[0])*(22)+qual]
-
+						#read=[f'@{name}', f"{barcodestring}{RANDOM6MER}{seq}", '+', str(qual[0])*(c.barcodebp+6)+qual]
+						read=[f'@{name}', f"{barcodestring}{seq}", '+', f'{qual[0] * c.barcodebp}{qual}']
 						outfile.write('\n'.join(read) + '\n')
-
 				os.remove(R1tmp)
 
 				with open(R2,'r') as infile, open(R2A,'a') as outfile:
-
 					for name,seq,qual in readfq(infile):
-
-						read=['@'+name,seq,'+',qual]
-
+						read=[f'@{name}',seq,'+',qual]
 						outfile.write('\n'.join(read) + '\n')
-
 				os.remove(R2)
 
 
@@ -397,8 +384,9 @@ def LinkedSim(w,c):
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 		print(f'[{now}][Message] Assigned a unique barcode to each molecule', file = sys.stderr)
-		
-		c.barcodes=[x for x in c.barcodes if x not in assigned_barcodes]
+		# remove the barcodes that were used
+		#[c.barcodes.remove(x) for x in assigned_barcodes]
+		#c.barcodes=[x for x in c.barcodes if x not in assigned_barcodes]
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 		print(f'[{now}][Message] {len(c.barcodes)} barcodes left', file = sys.stderr)
@@ -555,7 +543,7 @@ def run(parser,args):
 	allfastq=glob.glob(os.path.abspath(c.OUT) + '/*.fastq')
 
 	now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-	print(f'[{now}][Message] Compressing FASTQ', file = sys.stderr)
+	print(f'[{now}] Compressing FASTQ', file = sys.stderr)
 
 	#gzip multiprocessing
 
@@ -574,4 +562,4 @@ def run(parser,args):
 		p.join()
 
 	now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-	print(f'[{now}][Message] Done', file = sys.stderr)
+	print(f'[{now}] Done', file = sys.stderr)

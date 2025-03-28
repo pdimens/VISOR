@@ -228,7 +228,7 @@ def main():
 	args = parser.parse_args()
 
 	now = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-	print(f'[{now}][Message] Running VISOR with the following arguments:\n', file = sys.stderr)
+	print(f'[{now}] Running VISOR with the following arguments:\n', file = sys.stderr)
 
 	maxl = max(len(arg) for arg in vars(args))
 	for arg in vars(args):
