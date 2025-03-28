@@ -199,7 +199,7 @@ def main():
 	    \|__|/       \|__|\_________\|_______|\|__|\|__| v{__version__}
 	                     \|_________|                   
                                                     	                                                                        
-	""")
+	""", file = sys.stderr)
 	
 	
 	if len(sys.argv)==1:
@@ -228,16 +228,15 @@ def main():
 	args = parser.parse_args()
 
 	now = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-	print('[' + now + '][Message] Running VISOR with the following arguments:')
-	print()
+	print(f'[{now}][Message] Running VISOR with the following arguments:\n', file = sys.stderr)
 
 	maxl = max(len(arg) for arg in vars(args))
 	for arg in vars(args):
 		if arg not in ['func']:
 			arg_value = getattr(args, arg)
-			print('{:<{width}}: {}'.format(arg, arg_value, width=maxl))
+			print('{:<{width}}: {}'.format(arg, arg_value, width=maxl), file = sys.stderr)
 
-	print()
+	print("", file = sys.stderr)
 	args.func(parser, args)
 
 
