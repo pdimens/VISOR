@@ -389,6 +389,10 @@ def LinkedSim(w,c):
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 		print(f'[{now}] {len(c.barcodes)} barcodes left', file = sys.stderr)
+		if len(c.barcodes) == 0:
+			now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+			print(f'[{now}][Error] No more barcodes left for simulation. The requested parameters require more barcodes.', file = sys.stderr)
+			sys.exit(1)
 		print(f'[{now}] Simulating', file = sys.stderr)
 
 		chunk_size=len(molecules)/c.threads
