@@ -11,6 +11,7 @@ import gzip
 import pysam
 import multiprocessing
 from datetime import datetime
+from itertools import product
 from shutil import which
 
 #additional modules
@@ -21,8 +22,6 @@ from pywgsim import wgsim
 import numpy as np
 
 from VISOR import __version__
-
-#barcodepath=os.path.abspath(os.path.dirname(__file__) + '/4M-with-alts-february-2016.txt.gz')
 
 class c():
 
@@ -51,6 +50,7 @@ class c():
 	ffiles=None
 	fperc=0.0
 	ffile=None
+	outformat=None
 	hapnumber=0
 	threads=0
 
@@ -61,6 +61,8 @@ class c():
 	molcov=0
 	barcodebp = 0
 	barcodes=set()
+	bc_generator = None
+	used_bc={}
 	totalbarcodes = 0
 
 
@@ -143,6 +145,32 @@ def readfq(fp): # this is a fast generator function
 
 			read=[]
 
+def format_linkedread(name, bc, seq, qual):
+	'''
+	Given a linked-read output type, will format the read accordingly and return it
+	'''
+	if c.outformat == "10x":
+		read = [f'@{name}', f"{bc}{seq}", '+', f'{qual[0] * c.barcodebp}{qual}']
+
+	elif c.outformat == "tellseq":
+		read = [f'@{name}:{bc}', seq, '+', qual]
+
+	elif c.outformat == "haplotagging":
+		if bc not in c.used_bc:
+			acbd = "".join(next(c.bc_generator))
+			c.used_bc[bc] = acbd
+		else:
+			acbd = c.used_bc[bc]
+		read = [f'@{name}\tOX:Z:{bc}\tBX:Z:{acbd}', seq, '+', qual]
+
+	elif c.outformat == "stlfr":
+		if bc not in c.used_bc:
+			stlfr_bc = "_".join([str(i) for i in next(c.bc_generator)])
+			c.used_bc[bc] = stflr_bc
+		else:
+			stlfr_bc = c.used_bc[bc]
+		read = [f'@{name}#{stlfr_bc}', seq, '+', qual]
+	return read
 
 def randomlong(Par,seq_,EXPM):
 
@@ -287,7 +315,18 @@ def MolSim(processor,molecule,hfa,w,c):
 
 			R1tmp=os.path.abspath(c.OUT+'/' + processor + '.R1.tmp.fq')
 			R2=os.path.abspath(c.OUT+'/' + processor + '.R2.fq')
-
+			if c.outformat in ["10x", "tellseq"]:
+				# barcode at beginning of read 1
+				len_l = c.length - c.barcodebp
+				len_r = c.length
+			elif c.outformat == "stlfr":
+				# barcode at the end of read 2
+				len_l = c.length
+				len_r = c.length - c.barcodebp
+			else:
+				# haplotagging, half of barcode on read 1, half on read 2
+				len_l = c.length - (c.barcodebp // 2)
+				len_r = c.length - (c.barcodebp // 2)
 			wgsim.core(
 				r1 = R1tmp,
 				r2 =R2,
@@ -299,8 +338,8 @@ def MolSim(processor,molecule,hfa,w,c):
 				N = N,
 				dist = c.distance,
 				stdev = c.stdev,
-				size_l = c.length - (c.barcodebp), # (c.barcodebp + 6) if using random 6mer
-				size_r = c.length,
+				size_l = len_l,
+				size_r = len_r,
 				max_n = 0.05,
 				is_hap = 0,
 				is_fixed = 0,
@@ -308,7 +347,6 @@ def MolSim(processor,molecule,hfa,w,c):
 			)
 
 			os.remove(molfa)
-			#RANDOM6MER=''.join(np.random.choice(['A','T','G','C','N'],6, replace=True))
 
 			if os.stat(R1tmp).st_size == 0:
 				os.remove(R1tmp)
@@ -318,14 +356,16 @@ def MolSim(processor,molecule,hfa,w,c):
 
 				with open(R1tmp,'r') as infile, open(R1A,'a') as outfile:
 					for name,seq,qual in readfq(infile):
-						#read=[f'@{name}', f"{barcodestring}{RANDOM6MER}{seq}", '+', str(qual[0])*(c.barcodebp+6)+qual]
-						read=[f'@{name}', f"{barcodestring}{seq}", '+', f'{qual[0] * c.barcodebp}{qual}']
+						read = format_linkedread(name, barcodestring, seq, qual)
 						outfile.write('\n'.join(read) + '\n')
 				os.remove(R1tmp)
 
 				with open(R2,'r') as infile, open(R2A,'a') as outfile:
 					for name,seq,qual in readfq(infile):
-						read=[f'@{name}',seq,'+',qual]
+						if c.outformat == "10x":
+							read = [f'@{name}',seq,'+',qual]
+						else:
+							read = format_linkedread(name, barcodestring, seq, qual)
 						outfile.write('\n'.join(read) + '\n')
 				os.remove(R2)
 
@@ -488,11 +528,17 @@ def run(parser,args):
 	c.mollen=args.molecule_length
 	c.molcov=args.molecule_coverage
 	c.barcodepath = args.barcodes
-	#if args.barcodes:
-	#	c.barcodepath = os.path.abspath(args.barcodes)
+	c.outformat = args.output_format.lower()
+	if c.outformat == "haplotagging":
+		bc_range = [f"{i}".zfill(2) for i in range(1,97)]
+		c.bc_generator = product("A", bc_range, "C", bc_range, "B", bc_range, "D", bc_range)
+	if c.outformat == "stlfr":
+		bc_range = range(1, 1537)
+		c.bc_generator = product(bc_range, bc_range, bc_range)
+
 	fasta_files = [
-    	f for f in glob.glob(f'{os.path.abspath(c.SAMPLE)}/*') 
-    	if re.search(r'\.(fa|fasta)$', f, re.IGNORECASE)
+		f for f in glob.glob(f'{os.path.abspath(c.SAMPLE)}/*') 
+		if re.search(r'\.(fa|fasta)$', f, re.IGNORECASE)
 	]
 	if len(fasta_files) == 0:
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
