@@ -7,8 +7,8 @@ import sys
 import glob
 import re
 import math
-#import resource
 import gzip
+import pysam
 import multiprocessing
 from datetime import datetime
 from shutil import which
@@ -61,6 +61,7 @@ class c():
 	molcov=0
 	barcodebp = 0
 	barcodes=set()
+	totalbarcodes = 0
 
 
 class Molecule(object):
@@ -186,7 +187,7 @@ def deternumdroplet(molecules,molnum):
 	Determine the number of droplets
 	'''
 
-	large_droplet=4000000
+	large_droplet=c.totalbarcodes
 	assign_drop=[]
 
 	frag_drop = np.random.poisson(molnum,large_droplet)
@@ -245,15 +246,13 @@ def selectbarcode(drop,molecules,c):
 	return droplet_container, assigned_barcodes
 
 
-def Gzipper(sli,):
+def BGzipper(sli,):
 
 	'''
-	Compressing here is quite slow. Multi-processing saves some time
+	Use pysam/htslib BGzip and multi-processing to save some time
 	'''
-
 	for s in sli:
-		with open(s, 'rb') as textin, gzip.open(s+'.gz', 'wb', compresslevel=6) as gzout:
-			gzout.writelines(textin)
+		pysam.tabix_compress(s, f'{s}.gz', force=True)
 		os.remove(s)
 
 
@@ -345,7 +344,7 @@ def LinkedSim(w,c):
 		print(f'[{now}][Warning] Chromosome {w.chrom} not found in {c.ffile}. Skipped simulation', file = sys.stderr)
 	else:
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print(f'[{now}][Message] Preparing simulation from {c.ffile}. Haplotype {c.hapnumber}', file = sys.stderr)
+		print(f'[{now}] Preparing simulation from {c.ffile}. Haplotype {c.hapnumber}', file = sys.stderr)
 
 		chr_= hfa[w.chrom]
 		seq_ = chr_[w.start-1:w.end].seq
@@ -359,38 +358,38 @@ def LinkedSim(w,c):
 		Ns=seq_.count('N') #normalize coverage on Ns
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print(f'[{now}][Message] Number of available barcodes: {len(c.barcodes)}', file = sys.stderr)
+		print(f'[{now}] Number of available barcodes: {len(c.barcodes)}', file = sys.stderr)
 
 		MRPM=(c.molcov*c.mollen)/(c.length*2)
 		TOTALR=round(((c.regioncoverage*(len(seq_)-Ns))/c.length)/2)
 		EXPM=round(TOTALR/MRPM)
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print(f'[{now}][Message] Average number of paired reads per molecule: {MRPM}', file = sys.stderr)
-		print(f'[{now}][Message] Number of reads required to get the expected coverage: {TOTALR}', file = sys.stderr)
-		print(f'[{now}][Message] Expected number of molecules: {EXPM}', file = sys.stderr)
+		print(f'[{now}] Average number of paired reads per molecule: {MRPM}', file = sys.stderr)
+		print(f'[{now}] Number of reads required to get the expected coverage: {TOTALR}', file = sys.stderr)
+		print(f'[{now}] Expected number of molecules: {EXPM}', file = sys.stderr)
 
 		molecules=randomlong(c,seq_,EXPM) #MolSet
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print(f'[{now}][Message] Molecules generated: {len(molecules)}', file = sys.stderr)
+		print(f'[{now}] Molecules generated: {len(molecules)}', file = sys.stderr)
 
 		drop=deternumdroplet(molecules,c.molnum)
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print(f'[{now}][Message] Assigned molecules to: {len(drop)} partitions', file = sys.stderr)
+		print(f'[{now}] Assigned molecules to: {len(drop)} partitions', file = sys.stderr)
 
 		droplet_container,assigned_barcodes=selectbarcode(drop,molecules,c)
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print(f'[{now}][Message] Assigned a unique barcode to each molecule', file = sys.stderr)
+		print(f'[{now}] Assigned a unique barcode to each molecule', file = sys.stderr)
 		# remove the barcodes that were used
 		#[c.barcodes.remove(x) for x in assigned_barcodes]
 		#c.barcodes=[x for x in c.barcodes if x not in assigned_barcodes]
 
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print(f'[{now}][Message] {len(c.barcodes)} barcodes left', file = sys.stderr)
-		print(f'[{now}][Message] Simulating', file = sys.stderr)
+		print(f'[{now}] {len(c.barcodes)} barcodes left', file = sys.stderr)
+		print(f'[{now}] Simulating', file = sys.stderr)
 
 		chunk_size=len(molecules)/c.threads
 		slices=Chunks(molecules,math.ceil(chunk_size))
@@ -520,25 +519,29 @@ def run(parser,args):
 	else:
 		c.barcodebp = next(iter(bc_lens))
 	# validate barcodes are only ATCGU nucleotides
+	now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+	print(f'[{now}] Performing validations on supplied barcodes', file = sys.stderr)
 	for bc in c.barcodes:
 		if not bool(re.fullmatch(r'^[ATCGU]+$', bc, flags = re.IGNORECASE)):
 			now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 			print(f'[{now}][Error] Barcodes can only contain nucleotides A,T,C,G,U, but invalid barcode(s) provided: {bc}. This was first invalid barcode identified, but it may not be the only one.', file = sys.stderr)
 			sys.exit(1)
+	# once validations are done, get store the count of the total number of barcodes
+	c.totalbarcodes = len(c.barcodes)
 
 	now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-	print(f'[{now}][Message] Preparing for bulk simulations with a single clone', file = sys.stderr) #maybe we want to add more here in the future. 
+	print(f'[{now}] Preparing for bulk simulations with a single clone', file = sys.stderr) #maybe we want to add more here in the future. 
 
 	for k,s in enumerate(c.ffiles):
 		now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-		print(f'[{now}][Message] Processing haplotype {k+1}', file = sys.stderr)
+		print(f'[{now}] Processing haplotype {k+1}', file = sys.stderr)
 		c.hapnumber=str(k+1)
 		c.ffile=c.ffiles[k]
 
 		for w in bedsrtd: #do not use multi-processing on this as minimap2 may require too much memory
 
 			now=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-			print(f'[{now}][Message] Simulating from region {w.chrom}:{w.start}-{w.end}', file = sys.stderr)
+			print(f'[{now}] Simulating from region {w.chrom}:{w.start}-{w.end}', file = sys.stderr)
 			LinkedSim(w,c)
 
 	allfastq=glob.glob(os.path.abspath(c.OUT) + '/*.fastq')
@@ -554,7 +557,7 @@ def run(parser,args):
 
 	for i,sli in enumerate(slices):
 
-		p=multiprocessing.Process(target=Gzipper, args=(sli,))
+		p=multiprocessing.Process(target=BGzipper, args=(sli,))
 		p.start()
 		processes.append(p)
 		
