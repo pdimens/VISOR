@@ -175,7 +175,7 @@ stlfr         barcode appended to sequence ID via '#'
 haplotagging  barcode appended to sequence header via 'BX:Z' tag
               encoded in ACBD combinatorial format
 	"""
-	parser_linkedreads = subparsers.add_parser('XENIA', help = '10X gENomics sImulAtor', description = xeniatext, formatter_class=RawTextHelpFormatter)
+	parser_linkedreads = subparsers.add_parser('XENIA', help = '10X gENomics sImulAtor. Simulate many kinds of linked-read data types.', description = xeniatext, formatter_class=RawTextHelpFormatter)
 
 	required = parser_linkedreads.add_argument_group('Required I/O arguments')
 
