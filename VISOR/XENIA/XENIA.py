@@ -103,6 +103,7 @@ def run(parser,args):
 	c.molnum=args.molecule_number
 	c.mollen=args.molecule_length
 	c.molcov=args.molecule_coverage
+	c.whitelist= open(f'{c.OUT}/whitelist.bc', 'w')
 
 	if c.barcodetype in ["10x", "tellseq"]:
 		# barcode at beginning of read 1
@@ -172,7 +173,6 @@ def run(parser,args):
 
 	allfastq=glob.glob(os.path.abspath(c.OUT) + '/*.fastq')
 
-
 	#gzip multiprocessing
 
 	chunk_size=len(allfastq)/c.threads
@@ -180,6 +180,8 @@ def run(parser,args):
 	processes=[]
 
 	for i,sli in enumerate(slices):
+		for _s in sli:
+			print(f'[{get_now()}] Compressing {os.path.basename(_s)}', file = sys.stderr)
 
 		p=multiprocessing.Process(target=BGzipper, args=(sli,))
 		p.start()
@@ -188,5 +190,5 @@ def run(parser,args):
 	for p in processes:
 		
 		p.join()
-
+	c.whitelist.close()
 	print(f'[{get_now()}] Done', file = sys.stderr)

@@ -65,7 +65,7 @@ class c():
 	used_bc={}
 	totalbarcodes=0
 	remainingbarcodes=0
-
+	whitelist=None
 
 class Molecule(object):
 
@@ -195,22 +195,27 @@ def format_linkedread(name, bc, seq, qual):
 	'''
 	if c.outformat == "10x":
 		read = [f'@{name}', f"{bc}{seq}", '+', f'{qual[0] * c.barcodebp}{qual}']
-
+		if bc not in c.used_bc:
+			c.used_bc[bc] = True
+			c.whitelist.write(f"{bc}\n")
 	elif c.outformat == "tellseq":
 		read = [f'@{name}:{bc}', seq, '+', qual]
-
+		if bc not in c.used_bc:
+			c.whitelist.write(f"{bc}\n")
+			c.used_bc[bc] = True
 	elif c.outformat == "haplotagging":
 		if bc not in c.used_bc:
 			acbd = "".join(next(c.bc_generator))
 			c.used_bc[bc] = acbd
+			c.whitelist.write(f"{bc}\n")
 		else:
 			acbd = c.used_bc[bc]
 		read = [f'@{name}\tOX:Z:{bc}\tBX:Z:{acbd}', seq, '+', qual]
-
 	elif c.outformat == "stlfr":
 		if bc not in c.used_bc:
 			stlfr_bc = "_".join([str(i) for i in next(c.bc_generator)])
 			c.used_bc[bc] = stlfr_bc
+			c.whitelist.write(f"{bc}\n")
 		else:
 			stlfr_bc = c.used_bc[bc]
 		read = [f'@{name}#{stlfr_bc}', seq, '+', qual]
@@ -329,7 +334,6 @@ def BGzipper(sli,):
 	Use pysam/htslib BGzip and multi-processing to save some time
 	'''
 	for s in sli:
-		print(f'[{get_now()}] Compressing {os.path.basename(s)}', file = sys.stderr)
 		pysam.tabix_compress(s, f'{s}.gz', force=True)
 		os.remove(s)
 
@@ -356,7 +360,7 @@ def MolSim(processor,molecule,hfa,w,c):
 
 		R1A=os.path.abspath(c.OUT + '/SIM_S1_L' + str(c.hapnumber).zfill(3) + '_R1_001.fastq')
 		R2A=os.path.abspath(c.OUT + '/SIM_S1_L' + str(c.hapnumber).zfill(3) + '_R2_001.fastq')
-		
+
 		if N != 0:
 			molfa=os.path.abspath(f'{c.OUT}/{processor}_{moleculenumber}.fa')
 
