@@ -28,7 +28,7 @@ class c():
 
 	OUT = ''
 	BED = ''
-	SAMPLE = ''
+	FASTADIR = ''
 
 	#pywgsim
 
@@ -64,6 +64,7 @@ class c():
 	bc_generator = None
 	used_bc={}
 	totalbarcodes=0
+	remainingbarcodes=0
 
 
 class Molecule(object):
@@ -176,9 +177,8 @@ def interpret_barcodes(infile, lr_type):
 	- the total barcode	length (int)
 	- the total number of barcodes [or combinations] (int)
 	"""
-	print(f'[{get_now()}] Performing validations on supplied barcodes', file = sys.stderr)
 	bc = list(set(i.strip() for i in infile.read().splitlines()))
-	validate_barcodes(bc, lr_type)
+	validate_barcodes(bc)
 	bc_len = len(bc[0]) 
 	if lr_type == "haplotagging":
 		# 2 barcodes per
@@ -210,7 +210,7 @@ def format_linkedread(name, bc, seq, qual):
 	elif c.outformat == "stlfr":
 		if bc not in c.used_bc:
 			stlfr_bc = "_".join([str(i) for i in next(c.bc_generator)])
-			c.used_bc[bc] = stflr_bc
+			c.used_bc[bc] = stlfr_bc
 		else:
 			stlfr_bc = c.used_bc[bc]
 		read = [f'@{name}#{stlfr_bc}', seq, '+', qual]
@@ -304,11 +304,11 @@ def selectbarcode(drop,molecules,c):
 		temp=[]
 		start=start+num_molecule_per_partition
 		try:
-			bc = next(c.barcodes)
+			bc = next(c.barcodes) if c.barcodetype in ["10x", "tellseq"] else "".join(next(c.barcodes))
 		except StopIteration:
 			print(f'[{get_now()}][Error] No more barcodes left for simulation. The requested parameters require more barcodes.', file = sys.stderr)
 			sys.exit(1)
-		c.totalbarcodes -= 1
+		c.remainingbarcodes -= 1
 		for j in range(num_molecule_per_partition):
 						
 			index=index_molecule[j]
@@ -431,7 +431,7 @@ def LinkedSim(w,c):
 
 		Ns=seq_.count('N') #normalize coverage on Ns
 		
-		print(f'[{get_now()}] Number of available barcodes: {len(c.totalbarcodes)}', file = sys.stderr)
+		print(f'[{get_now()}] Number of available barcodes: {c.remainingbarcodes}', file = sys.stderr)
 
 		MRPM=(c.molcov*c.mollen)/(c.length*2)
 		TOTALR=round(((c.regioncoverage*(len(seq_)-Ns))/c.length)/2)
@@ -453,7 +453,7 @@ def LinkedSim(w,c):
 
 		print(f'[{get_now()}] Assigned a unique barcode to each molecule', file = sys.stderr)
 
-		print(f'[{get_now()}] {c.totalbarcodes} barcodes left', file = sys.stderr)
+		print(f'[{get_now()}] {c.remainingbarcodes} barcodes left', file = sys.stderr)
 
 		print(f'[{get_now()}] Simulating', file = sys.stderr)
 

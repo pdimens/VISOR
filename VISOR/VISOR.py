@@ -158,12 +158,12 @@ def main():
 	#v1.0->v1.1 Removed calls to external bash scripts
 	xeniatext = """
 Simulate linked-read FASTQ using regions specified in standard BED format. XENIA can optionally take a file of nucleotide barcodes, 1 per line. \
-You can specify the linked-read barcode type to use (--barcode-type) as well as well out the format of the output FASTQ files. For example, you \
+You can specify the linked-read barcode type to use (--barcode-type) as well as the output format of FASTQ files (default is the same as barcode type). For example, you \
 can provide a file of 96 barcodes (commonly haplotagging style), select --barcode-type stlfr (combinatorial 3-barcode on R2 read), and have \
 --output-format tellseq (@seqid:barcode header format).
 
 Barcode Types
-10x           single barcode on R1 (also use for tellseq)
+10x/tellseq   single barcode on R1
 stlfr         combinatorial 3-barcode on R2
 haplotagging  R1 and R2 each have different combinatorial 2-barcodes
 
@@ -177,12 +177,12 @@ haplotagging  barcode appended to sequence header via 'BX:Z' tag
 	"""
 	parser_linkedreads = subparsers.add_parser('XENIA', help = '10X gENomics sImulAtor. Simulate many kinds of linked-read data types.', description = xeniatext, formatter_class=RawTextHelpFormatter)
 
-	required = parser_linkedreads.add_argument_group('Required I/O arguments')
+	required = parser_linkedreads.add_argument_group('I/O arguments')
 
-	required.add_argument('-s','--sample', help='folder containing FASTA haplotypes', metavar='FOLDER', required=True)
-	required.add_argument('-b','--bedfile', help='one or more regions to simulate in BED format', metavar='BED', required=True)
-	required.add_argument('-o','--output', help='output folder for FASTQ files', metavar='FOLDER', required=True)
-	required.add_argument('-O','--output-format', help='output format for FASTQ files [10x]\n{10x, stlfr, haplotagging, tellseq}', default="10x", metavar='', choices = ["10x", "stlfr", "haplotagging", "tellseq"])
+	required.add_argument('bedfile', help='one or more regions to simulate in BED format', metavar='BEDFILE')
+	required.add_argument('-f','--fasta', help='folder containing FASTA haplotypes (required)', metavar='FOLDER', required=True)
+	required.add_argument('-o','--output', help='output folder for FASTQ files (required)', metavar='FOLDER', required=True)
+	required.add_argument('-O','--output-format', help='output format for FASTQ files [--barcode-type]\n{10x, haplotagging, stlfr, tellseq}', metavar='CHOICE', choices = ["10x", "stlfr", "haplotagging", "tellseq"])
 
 	wgsim = parser_linkedreads.add_argument_group('Paired-end FASTQ simulation using pywgsim')
 
@@ -197,8 +197,8 @@ haplotagging  barcode appended to sequence header via 'BX:Z' tag
 
 	molecules=parser_linkedreads.add_argument_group('Linked-read simulation')
 	bc_default = os.path.abspath(os.path.dirname(__file__) + '/XENIA/4M-with-alts-february-2016.txt.gz')
-	molecules.add_argument('--barcodes', help='file of barcodes to simulate, one per line [10X default barcodes]', metavar='FILE', default = bc_default, type=barcodefile)
-	molecules.add_argument('--barcode-type', help='Type of linked-read barcodes used for --barcodes [10x]\n{10x, stlfr, haplotagging}', metavar='', default = "10x", choices = ["10x", "stlfr", "haplotagging"])
+	molecules.add_argument('-b', '--barcodes', help='file of barcodes to simulate, one per line [10X barcodes]', metavar='FILE', default = bc_default, type=barcodefile)
+	molecules.add_argument('-B', '--barcode-type', help='Type of linked-read experiment [10x]\n{10x, haplotagging, stlfr, tellseq}', metavar='CHOICE', default = "10x", choices = ["10x", "stlfr", "haplotagging", "tellseq"])
 	molecules.add_argument('--molecule_length', help='mean length of molecules [80000]', metavar='', default=80000, type=int)
 	molecules.add_argument('--molecule_number', help='number of fragments per barcode on average [10]', metavar='', default=10, type=int)
 	molecules.add_argument('--molecule_coverage', help='mean coverage per molecule [0.2]', metavar='', default=0.2, type=float)

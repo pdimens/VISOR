@@ -18,6 +18,7 @@ from shutil import which
 
 from .xenia_helper import *
 import pybedtools
+from VISOR import __version__
 #import pyfaidx
 #from pywgsim import wgsim
 #import numpy as np
@@ -35,7 +36,7 @@ def run(parser,args):
 
 	c.OUT=os.path.abspath(args.output)
 	c.BED=os.path.abspath(args.bedfile)
-	c.SAMPLE=os.path.abspath(args.sample)
+	c.FASTADIR=os.path.abspath(args.fasta)
 	c.threads=args.threads
 
 	if not os.path.exists(c.OUT):
@@ -104,8 +105,10 @@ def run(parser,args):
 		# would be 4-segment haplotagging where AC on read 1 and BD on read 2
 		c.len_r1 = c.length - c.barcodebp
 		c.len_r2 = c.length - c.barcodebp
-	c.outformat=args.output_format.lower()
-	#TODO is this the best way to do this?
+	if args.output_format:
+		c.outformat=args.output_format.lower()
+	else:
+		c.outformat = c.barcodetype
 	if c.outformat == "haplotagging":
 		bc_range = [f"{i}".zfill(2) for i in range(1,97)]
 		c.bc_generator = product("A", bc_range, "C", bc_range, "B", bc_range, "D", bc_range)
@@ -114,15 +117,15 @@ def run(parser,args):
 		c.bc_generator = product(bc_range, bc_range, bc_range)
 
 	fasta_files = [
-		f for f in glob.glob(f'{os.path.abspath(c.SAMPLE)}/*') 
+		f for f in glob.glob(f'{os.path.abspath(c.FASTADIR)}/*') 
 		if re.search(r'\.(fa|fasta)$', f, re.IGNORECASE)
 	]
 	if len(fasta_files) == 0:
-		print(f'[{get_now()}][Error] No FASTA files detected in {c.SAMPLE}. If your FASTA files are gzipped, please decompress them.', file = sys.stderr)
+		print(f'[{get_now()}][Error] No FASTA files detected in {c.FASTADIR}. If your FASTA files are gzipped, please decompress them.', file = sys.stderr)
 		sys.exit(1)
 	c.ffiles=sorted(fasta_files, key=natural_keys) #list all FASTA in folder
 	c.regioncoverage=c.coverage/len(c.ffiles)
-
+	print(f'[{get_now()}] Performing validations on supplied barcodes', file = sys.stderr)
 	try:
 		with gzip.open(c.barcodepath, 'rt') as filein:
 			c.barcodes, c.barcodebp, c.totalbarcodes = interpret_barcodes(filein, c.barcodetype)
@@ -132,7 +135,7 @@ def run(parser,args):
 	except:
 		print(f'[{get_now()}][Error] Cannot open {c.barcodepath} for reading', file = sys.stderr)
 		sys.exit(1)
-
+	c.remainingbarcodes = c.totalbarcodes
 	print(f'[{get_now()}] Preparing for bulk simulations with a single clone', file = sys.stderr) #maybe we want to add more here in the future. 
 
 	for k,s in enumerate(c.ffiles):
