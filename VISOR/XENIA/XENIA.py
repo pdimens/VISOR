@@ -18,9 +18,9 @@ from shutil import which
 
 from .xenia_helper import *
 import pybedtools
-import pyfaidx
-from pywgsim import wgsim
-import numpy as np
+#import pyfaidx
+#from pywgsim import wgsim
+#import numpy as np
 
 def run(parser,args):
 
@@ -28,7 +28,7 @@ def run(parser,args):
 	Check arguments, run functions
 	'''
 
-	redirect_stdout()# block pywgsim stdout
+	redirect_stdout() # block pywgsim stdout
 	print(f'[{get_now()}][BETA] VISOR XENIA v{__version__}', file = sys.stderr)
 
 	#fill container
@@ -92,7 +92,7 @@ def run(parser,args):
 	c.molcov=args.molecule_coverage
 	c.barcodepath=args.barcodes
 	c.barcodetype=args.barcode_type.lower()
-	if c.barcodetype in ["10x", "tellseq", "haplotagging_3bc"]:
+	if c.barcodetype in ["10x", "tellseq"]:
 		# barcode at beginning of read 1
 		c.len_r1 = c.length - c.barcodebp
 		c.len_r2 = c.length
@@ -102,8 +102,8 @@ def run(parser,args):
 		c.len_r2 = c.length - c.barcodebp
 	else:
 		# would be 4-segment haplotagging where AC on read 1 and BD on read 2
-		c.len_r1 = c.length - c.barcodebp[0]
-		c.len_r2 = c.length - c.barcodebp[1]
+		c.len_r1 = c.length - c.barcodebp
+		c.len_r2 = c.length - c.barcodebp
 	c.outformat=args.output_format.lower()
 	#TODO is this the best way to do this?
 	if c.outformat == "haplotagging":
@@ -125,23 +125,20 @@ def run(parser,args):
 
 	try:
 		with gzip.open(c.barcodepath, 'rt') as filein:
-			c.barcodes = filein.read().splitlines()
+			c.barcodes, c.barcodebp, c.totalbarcodes = interpret_barcodes(filein, c.barcodetype)
 	except gzip.BadGzipFile:
 		with open(c.barcodepath, 'r') as filein:
-			c.barcodes = filein.read().splitlines()
+			c.barcodes, c.barcodebp, c.totalbarcodes = interpret_barcodes(filein, c.barcodetype)
 	except:
 		print(f'[{get_now()}][Error] Cannot open {c.barcodepath} for reading', file = sys.stderr)
 		sys.exit(1)
-	# validate barcodes are all the same length
 
-	# once validations are done, get store the count of the total number of barcodes
-	c.totalbarcodes = len(c.barcodes)
 	print(f'[{get_now()}] Preparing for bulk simulations with a single clone', file = sys.stderr) #maybe we want to add more here in the future. 
 
 	for k,s in enumerate(c.ffiles):
 
 		print(f'[{get_now()}] Processing haplotype {k+1}', file = sys.stderr)
-		c.hapnumber=str(k+1)
+		c.hapnumber=f'{k+1}'
 		c.ffile=c.ffiles[k]
 
 		for w in bedsrtd: #do not use multi-processing on this as minimap2 may require too much memory
@@ -152,7 +149,7 @@ def run(parser,args):
 
 	allfastq=glob.glob(os.path.abspath(c.OUT) + '/*.fastq')
 
-	print(f'[{get_now()}] Compressing FASTQ', file = sys.stderr)
+	print(f'[{get_now()}] Compressing FASTQ file(s)', file = sys.stderr)
 
 	#gzip multiprocessing
 
