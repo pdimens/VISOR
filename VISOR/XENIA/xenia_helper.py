@@ -59,7 +59,7 @@ class c():
 	mollen=0
 	molcov=0
 	barcodetype=None
-	barcodebp = None  # int or list[int] of length 2
+	barcodebp=0
 	barcodes=None	# will be an iterable to use with next()
 	bc_generator = None
 	used_bc={}
@@ -150,11 +150,13 @@ def readfq(fp): # this is a fast generator function
 def validate_barcodes(bc_list):
 	'''
 	Takes a list of barcodes read from input barcode file and validates them according to the linked-read type.
-	Validations include: ATGCU nucleotides, barcodes same length (or same length within column)
-	Returns the barcode length, either as an int or list[int] if it's 4-segment haplotagging
+	Validations include: ATGCU nucleotides, barcodes same length (or same length within column).
 	'''
 	# check first row for multiple columns, if there are multiple, it's haplotagging
-	if len(bc_list[0].strip().split()) == 1:
+	if len(bc_list[0].strip().split()) != 1:
+		print(f'[{get_now()}][Error] Barcode file is expected to only have one barcode per line)', file = sys.stderr)
+		sys.exit(1)
+	else:
 		bc_lens = set()
 		for i in bc_list:
 			bc_lens.add(len(i))
@@ -166,66 +168,26 @@ def validate_barcodes(bc_list):
 			if not bool(re.fullmatch(r'^[ATCGU]+$', bc, flags = re.IGNORECASE)):
 				print(f'[{get_now()}][Error] Barcodes can only contain nucleotides A,T,C,G,U, but invalid barcode(s) provided: {bc}. This was first invalid barcode identified, but it may not be the only one.', file = sys.stderr)
 				sys.exit(1)
-		return bc_lens.pop()
-	else:
-		segment_translation = {0: "A", 1: "B", 2: "C", 3: "D"}
-		bc_lengths = {}
-		segments = {}
-		for i in bc_list:
-			spltrow = i.strip().split()
-			for idx,bc in enumerate(spltrow):
-				if not bool(re.fullmatch(r'^[ATCGU]+$', bx, flags = re.IGNORECASE)):
-					print(f'[{get_now()}][Error] Barcodes can only contain nucleotides A,T,C,G,U, but invalid barcode(s) provided: {bc}. This was first invalid barcode identified, but it may not be the only one.', file = sys.stderr)
-					sys.exit(1)
-				seg_idx = segment_translation[idx]
-				if seg_idx in segments:
-					segments[seg_idx].add(bc)
-					bc_lengths[seg_idx].add(len(bc))
-				else:
-					segments[seg_idx] = {bc}
-					bc_lengths[seg_idx] = set([len(bc)])
-		for k,v in bc_lengths.items():
-			if len(v) > 1:
-				print(f'[{get_now()}][Error] Haplotagging barcodes must all be the same length within a column (but the length can vary across rows). Offending column: {k}', file = sys.stderr)
-				sys.exit(1)
-		if len(segments) == 3:
-			return sum(i.pop() for i in bc_lengths.values())
-		else:
-			return [bc_lengths["A"].pop() + bc_lengths["C"].pop(), bc_lengths["B"].pop() + bc_lengths["D"].pop()]
 
 def interpret_barcodes(infile, lr_type):
 	"""
-	Takes an open file connection and reads it line by line. Performs barcode validations depending on the inferred
-	linked-read type. Returns:
+	Takes an open file connection and reads it line by line. Performs barcode validations and returns:
 	- either an iter() or generator of barcodes (to use with next())
-	- the total barcode	length, either as an int (10x, tellseq, stlfr, haplotagging_3bc) or list[int] (haplotagging_4bc)
-	- the total number of barcode [or combinations]
+	- the total barcode	length (int)
+	- the total number of barcodes [or combinations] (int)
 	"""
 	print(f'[{get_now()}] Performing validations on supplied barcodes', file = sys.stderr)
-	bc = infile.read().splitlines()
-	bc_len = validate_barcodes(bc, lr_type)
-	if lr_type in ["10x", "tellseq", "stlfr"]:
-		bc = list(set(bc))
-		if lr_type != "stlfr":
-			return iter(bc), bc_len, len(bc)
-		else:
-			return product(bc,bc,bc), bc_len, len(bc)**3
+	bc = list(set(i.strip() for i in infile.read().splitlines()))
+	validate_barcodes(bc, lr_type)
+	bc_len = len(bc[0]) 
+	if lr_type == "haplotagging":
+		# 2 barcodes per
+		return product(bc,bc,bc,bc), 2 * bc_len, len(bc)**4
+	if lr_type == "stlfr":
+		return product(bc,bc,bc), 3 * bc_len, len(bc)**3
 	else:
-		segments = {}
-		segment_translation = {0: "A", 1: "B", 2: "C", 3: "D"}
-		for i in bc:
-			spltrow = i.split()
-			for idx,bx in enumerate(spltrow):
-				seg_idx = segment_translation[idx]
-				if seg_idx in segments:
-					segments[seg_idx].add(bx)
-				else:
-					segments[seg_idx] = {bx}
-				segments[idx] = bx
-		if len(segments) == 3:
-			return product(list(segments["A"]), list(segments["B"]), list(segments["C"])), bc_len, len(segments["A"])**3
-		else:
-			return product(list(segments["A"]), list(segments["C"]), list(segments["B"]), list(segments["D"])), bc_len, len(segments["A"])**4
+		return iter(bc), bc_len, len(bc)
+
 
 def format_linkedread(name, bc, seq, qual):
 	'''
@@ -323,7 +285,7 @@ def deternumdroplet(molecules,molnum):
 def selectbarcode(drop,molecules,c):
 
 	'''
-	Select barcode
+	Select barcode to use for droplet/partition
 	'''
 
 	permutnum=np.random.permutation(len(molecules))
@@ -341,7 +303,12 @@ def selectbarcode(drop,molecules,c):
 		totalseqlen=0
 		temp=[]
 		start=start+num_molecule_per_partition
-		bc = c.barcodes.pop()
+		try:
+			bc = next(c.barcodes)
+		except StopIteration:
+			print(f'[{get_now()}][Error] No more barcodes left for simulation. The requested parameters require more barcodes.', file = sys.stderr)
+			sys.exit(1)
+		c.totalbarcodes -= 1
 		for j in range(num_molecule_per_partition):
 						
 			index=index_molecule[j]
@@ -374,13 +341,13 @@ def MolSim(processor,molecule,hfa,w,c):
 
 	for mol in molecule:
 
-		moleculenumber=str(mol.seqidx+1)
-		moleculedroplet=str(mol.index_droplet+1)
-		barcodestring=str(mol.barcode)
-		chromstart=str(w.start+mol.start)
-		chromend=str(w.start+mol.end)
+		moleculenumber = mol.seqidx + 1
+		moleculedroplet = mol.index_droplet + 1
+		barcodestring = mol.barcode
+		chromstart= w.start + mol.start
+		chromend = w.start + mol.end
 
-		header='MOL:' + moleculenumber + '_GEM:' + moleculedroplet + '_BAR:' + barcodestring + '_CHROM:' + w.chrom + '_START:' + chromstart + '_END:' + chromend
+		header=f'MOL:{moleculenumber}_GEM:{moleculedroplet}_BAR:{barcodestring}_CHROM:{w.chrom}_START:{chromstart}_END:{chromend}'
 		seq__=hfa[w.chrom][w.start+mol.start-1:w.start+mol.end].seq
 
 		truedim=mol.length-seq__.count('N')
@@ -444,7 +411,6 @@ def LinkedSim(w,c):
 
 	'''
 	Perform linked-reads simulation
-
 	'''
 
 	hfa=pyfaidx.Fasta(c.ffile)
@@ -465,7 +431,7 @@ def LinkedSim(w,c):
 
 		Ns=seq_.count('N') #normalize coverage on Ns
 		
-		print(f'[{get_now()}] Number of available barcodes: {len(c.barcodes)}', file = sys.stderr)
+		print(f'[{get_now()}] Number of available barcodes: {len(c.totalbarcodes)}', file = sys.stderr)
 
 		MRPM=(c.molcov*c.mollen)/(c.length*2)
 		TOTALR=round(((c.regioncoverage*(len(seq_)-Ns))/c.length)/2)
@@ -486,14 +452,9 @@ def LinkedSim(w,c):
 		droplet_container,assigned_barcodes=selectbarcode(drop,molecules,c)
 
 		print(f'[{get_now()}] Assigned a unique barcode to each molecule', file = sys.stderr)
-		# remove the barcodes that were used
-		#[c.barcodes.remove(x) for x in assigned_barcodes]
-		#c.barcodes=[x for x in c.barcodes if x not in assigned_barcodes]
-		
-		print(f'[{get_now()}] {len(c.barcodes)} barcodes left', file = sys.stderr)
-		if len(c.barcodes) == 0:
-			print(f'[{get_now()}][Error] No more barcodes left for simulation. The requested parameters require more barcodes.', file = sys.stderr)
-			sys.exit(1)
+
+		print(f'[{get_now()}] {c.totalbarcodes} barcodes left', file = sys.stderr)
+
 		print(f'[{get_now()}] Simulating', file = sys.stderr)
 
 		chunk_size=len(molecules)/c.threads
