@@ -329,6 +329,7 @@ def BGzipper(sli,):
 	Use pysam/htslib BGzip and multi-processing to save some time
 	'''
 	for s in sli:
+		print(f'[{get_now()}] Compressing {os.path.basename(s)}', file = sys.stderr)
 		pysam.tabix_compress(s, f'{s}.gz', force=True)
 		os.remove(s)
 

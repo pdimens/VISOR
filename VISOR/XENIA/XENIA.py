@@ -75,10 +75,11 @@ def run(parser,args):
 		print(f'[{get_now()}][Error] BED {c.BED} does not exist, is not readable, or is not a valid BED', file = sys.stderr)
 		sys.exit(1)
 
-	# fill c with wgsim and general linked-read parameters 
+	# read in the barcodes, then parse and validate
 	c.barcodepath=args.barcodes
 	c.barcodetype=args.barcode_type.lower()
-	print(f'[{get_now()}] Performing validations on supplied barcodes', file = sys.stderr)
+
+	print(f'[{get_now()}] Validating the supplied barcodes', file = sys.stderr)
 	try:
 		with gzip.open(c.barcodepath, 'rt') as filein:
 			c.barcodes, c.barcodebp, c.totalbarcodes = interpret_barcodes(filein, c.barcodetype)
@@ -89,6 +90,7 @@ def run(parser,args):
 		print(f'[{get_now()}][Error] Cannot open {c.barcodepath} for reading', file = sys.stderr)
 		sys.exit(1)
 
+	# fill c with wgsim and general linked-read parameters 
 	c.remainingbarcodes = c.totalbarcodes
 	c.coverage=args.coverage
 	c.error=args.error
@@ -101,6 +103,7 @@ def run(parser,args):
 	c.molnum=args.molecule_number
 	c.mollen=args.molecule_length
 	c.molcov=args.molecule_coverage
+
 	if c.barcodetype in ["10x", "tellseq"]:
 		# barcode at beginning of read 1
 		c.len_r1 = c.length - c.barcodebp
@@ -169,7 +172,6 @@ def run(parser,args):
 
 	allfastq=glob.glob(os.path.abspath(c.OUT) + '/*.fastq')
 
-	print(f'[{get_now()}] Compressing FASTQ file(s)', file = sys.stderr)
 
 	#gzip multiprocessing
 
