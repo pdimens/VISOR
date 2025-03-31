@@ -16,12 +16,9 @@ from shutil import which
 
 #additional modules
 
-from .xenia_helper import *
 import pybedtools
+from .xenia_helper import *
 from VISOR import __version__
-#import pyfaidx
-#from pywgsim import wgsim
-#import numpy as np
 
 def run(parser,args):
 
@@ -79,7 +76,20 @@ def run(parser,args):
 		sys.exit(1)
 
 	# fill c with wgsim and general linked-read parameters 
+	c.barcodepath=args.barcodes
+	c.barcodetype=args.barcode_type.lower()
+	print(f'[{get_now()}] Performing validations on supplied barcodes', file = sys.stderr)
+	try:
+		with gzip.open(c.barcodepath, 'rt') as filein:
+			c.barcodes, c.barcodebp, c.totalbarcodes = interpret_barcodes(filein, c.barcodetype)
+	except gzip.BadGzipFile:
+		with open(c.barcodepath, 'r') as filein:
+			c.barcodes, c.barcodebp, c.totalbarcodes = interpret_barcodes(filein, c.barcodetype)
+	except:
+		print(f'[{get_now()}][Error] Cannot open {c.barcodepath} for reading', file = sys.stderr)
+		sys.exit(1)
 
+	c.remainingbarcodes = c.totalbarcodes
 	c.coverage=args.coverage
 	c.error=args.error
 	c.distance=args.distance
@@ -91,20 +101,27 @@ def run(parser,args):
 	c.molnum=args.molecule_number
 	c.mollen=args.molecule_length
 	c.molcov=args.molecule_coverage
-	c.barcodepath=args.barcodes
-	c.barcodetype=args.barcode_type.lower()
 	if c.barcodetype in ["10x", "tellseq"]:
 		# barcode at beginning of read 1
 		c.len_r1 = c.length - c.barcodebp
+		if c.len_r1 <= 5:
+			print(f'[{get_now()}][Error] Removing barcodes from the reads would leave sequences <= 5 bp long. Read length: {c.length}, Barcode length: {c.barcodebp}', file = sys.stderr)
+			sys.exit(1)
 		c.len_r2 = c.length
 	elif c.barcodetype == "stlfr":
 		# barcode at the end of read 2
 		c.len_r1 = c.length
 		c.len_r2 = c.length - c.barcodebp
+		if c.len_r2 <= 5:
+			print(f'[{get_now()}][Error] Removing barcodes from the reads would leave sequences <= 5 bp long. Read length: {c.length}, Barcode length: {c.barcodebp}', file = sys.stderr)
+			sys.exit(1)
 	else:
 		# would be 4-segment haplotagging where AC on read 1 and BD on read 2
 		c.len_r1 = c.length - c.barcodebp
 		c.len_r2 = c.length - c.barcodebp
+		if c.len_r1 <= 5 or len_r2 <= 5:
+			print(f'[{get_now()}][Error] Removing barcodes from the reads would leave sequences <= 5 bp long. Read length: {c.length}, Barcode length: {c.barcodebp}', file = sys.stderr)
+			sys.exit(1)
 	if args.output_format:
 		c.outformat=args.output_format.lower()
 	else:
@@ -125,18 +142,19 @@ def run(parser,args):
 		sys.exit(1)
 	c.ffiles=sorted(fasta_files, key=natural_keys) #list all FASTA in folder
 	c.regioncoverage=c.coverage/len(c.ffiles)
-	print(f'[{get_now()}] Performing validations on supplied barcodes', file = sys.stderr)
-	try:
-		with gzip.open(c.barcodepath, 'rt') as filein:
-			c.barcodes, c.barcodebp, c.totalbarcodes = interpret_barcodes(filein, c.barcodetype)
-	except gzip.BadGzipFile:
-		with open(c.barcodepath, 'r') as filein:
-			c.barcodes, c.barcodebp, c.totalbarcodes = interpret_barcodes(filein, c.barcodetype)
-	except:
-		print(f'[{get_now()}][Error] Cannot open {c.barcodepath} for reading', file = sys.stderr)
-		sys.exit(1)
-	c.remainingbarcodes = c.totalbarcodes
-	print(f'[{get_now()}] Preparing for bulk simulations with a single clone', file = sys.stderr) #maybe we want to add more here in the future. 
+	
+	# check that the haplotagging output format can support the supplied number of barcodes
+	if c.outformat == "haplotagging":
+		if c.totalbarcodes > 96**4:
+			print(f'[{get_now()}][Error] The barcodes and barcode type supplied will generate a potenial {c.totalbarcodes} barcodes, but outputting in haplotagging format is limited to {96**4} barcodes', file = sys.stderr)
+			sys.exit(1)
+	# check that the stlfr output format can support the supplied number of barcodes
+	if c.outformat == "stlfr":
+		if c.totalbarcodes > 1537**3:
+			print(f'[{get_now()}][Error] The barcodes and barcode type supplied will generate a potenial {c.totalbarcodes} barcodes, but outputting in stlfr format is limited to {1537**3} barcodes', file = sys.stderr)
+			sys.exit(1)
+
+	print(f'[{get_now()}] Preparing for bulk simulations with a single clone', file = sys.stderr) 
 
 	for k,s in enumerate(c.ffiles):
 
@@ -145,7 +163,6 @@ def run(parser,args):
 		c.ffile=c.ffiles[k]
 
 		for w in bedsrtd: #do not use multi-processing on this as minimap2 may require too much memory
-
 	
 			print(f'[{get_now()}] Simulating from region {w.chrom}:{w.start}-{w.end}', file = sys.stderr)
 			LinkedSim(w,c)
