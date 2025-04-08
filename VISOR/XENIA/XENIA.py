@@ -34,31 +34,14 @@ def run(parser,args):
 	c.OUT=os.path.abspath(args.output)
 	c.BED=os.path.abspath(args.bedfile)
 	c.FASTADIR=os.path.abspath(args.fasta)
+	c.PREFIX=args.prefix
 	c.threads=args.threads
 
-	if not os.path.exists(c.OUT):
+	os.makedirs(c.OUT, exist_ok= True)
+	if not os.access(os.path.abspath(c.OUT),os.W_OK):
 
-		try:
-
-			os.makedirs(c.OUT)
-
-		except:
-	
-			print(f'[{get_now()}][Error] Cannot create the output folder', file = sys.stderr)
-			sys.exit(1)
-
-	else:
-
-		if not os.access(os.path.abspath(c.OUT),os.W_OK):
-
-			print(f'[{get_now()}][Error] Missing write permissions on the output folder', file = sys.stderr)
-			sys.exit(1)
-			
-		elif os.listdir(os.path.abspath(c.OUT)):
-	
-			print(f'[{get_now()}][Error] The output folder is not empty: specify another output folder or clean the current one ({c.OUT})', file = sys.stderr)
-			sys.exit(1)
-
+		print(f'[{get_now()}][Error] Missing write permissions on the output folder', file = sys.stderr)
+		sys.exit(1)
 
 	if which('bedtools') is None:
 
@@ -103,7 +86,9 @@ def run(parser,args):
 	c.molnum=args.molecule_number
 	c.mollen=args.molecule_length
 	c.molcov=args.molecule_coverage
-	c.whitelist= open(f'{c.OUT}/whitelist.bc', 'w')
+	if c.molcov >=1:
+		c.molcovdist = np.random.default_rng()
+	c.barcodelist= open(f'{c.OUT}/{c.PREFIX}.barcodes', 'w')
 
 	if c.barcodetype in ["10x", "tellseq"]:
 		# barcode at beginning of read 1
@@ -166,7 +151,7 @@ def run(parser,args):
 		c.hapnumber=f'{k+1}'
 		c.ffile=c.ffiles[k]
 
-		for w in bedsrtd: #do not use multi-processing on this as minimap2 may require too much memory
+		for w in bedsrtd:
 	
 			print(f'[{get_now()}] Simulating from region {w.chrom}:{w.start}-{w.end}', file = sys.stderr)
 			LinkedSim(w,c)
@@ -190,5 +175,5 @@ def run(parser,args):
 	for p in processes:
 		
 		p.join()
-	c.whitelist.close()
+	c.barcodelist.close()
 	print(f'[{get_now()}] Done', file = sys.stderr)

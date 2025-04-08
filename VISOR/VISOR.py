@@ -169,27 +169,30 @@ haplotagging  R1 and R2 each have different combinatorial 2-barcodes
 
 Output Types
 10x           barcode in sequence at start of R1
-tellseq       barcode appended to sequence ID via ':'
-stlfr         barcode appended to sequence ID via '#'
-              encoded in 1_2_3 combinatorial format
 haplotagging  barcode appended to sequence header via 'BX:Z' tag
               encoded in ACBD combinatorial format
+standard      barcode appended to sequence header via `BX:Z` tag
+              but no specific barcode format (uses input style)
+stlfr         barcode appended to sequence ID via '#'
+              encoded in 1_2_3 combinatorial format
+tellseq       barcode appended to sequence ID via ':'
 	"""
 	parser_linkedreads = subparsers.add_parser('XENIA', help = '10X gENomics sImulAtor. Simulate many kinds of linked-read data types.', description = xeniatext, formatter_class=RawTextHelpFormatter)
 
 	required = parser_linkedreads.add_argument_group('I/O arguments')
 
 	required.add_argument('bedfile', help='one or more regions to simulate in BED format', metavar='BEDFILE')
-	required.add_argument('-f','--fasta', help='folder containing FASTA haplotypes (required)', metavar='FOLDER', required=True)
-	required.add_argument('-o','--output', help='output folder for FASTQ files (required)', metavar='FOLDER', required=True)
-	required.add_argument('-O','--output-format', help='output format for FASTQ files [--barcode-type]\n{10x, haplotagging, stlfr, tellseq}', metavar='CHOICE', choices = ["10x", "stlfr", "haplotagging", "tellseq"])
+	required.add_argument('fasta', help='folder containing FASTA haplotypes', metavar='FASTA_FOLDER')
+	required.add_argument('-o','--output', help='output directory (required)', metavar='FOLDER', required=True)
+	required.add_argument('-p','--prefix', help='prefix for FASTQ files [SIM]', metavar='PREFIX')
+	required.add_argument('-O','--output-format', help='output format for FASTQ files [--barcode-type]\n{10x, haplotagging, standard, stlfr, tellseq}', metavar='CHOICE', choices = ["10x", "stlfr", "standard", "haplotagging", "tellseq"])
 
 	wgsim = parser_linkedreads.add_argument_group('Paired-end FASTQ simulation using pywgsim')
 
 	wgsim.add_argument('--coverage', help='mean coverage for simulated regions [30.0]', metavar='', default=30.0, type=float) #required number of read calculated internally
 	wgsim.add_argument('--error', help='base error rate [0.02]', metavar='', default=0.02, type=float)
 	wgsim.add_argument('--distance', help='outer distance between the two ends [500]', metavar='', default=500, type=int)
-	wgsim.add_argument('--stdev', help='standard deviation of the distance between the two ends [50]',metavar='', default=50, type=int)
+	wgsim.add_argument('--stdev', help='standard deviation of --distance [50]',metavar='', default=50, type=int)
 	wgsim.add_argument('--length', help='length of reads [150]', metavar='', default=150, type=int)
 	wgsim.add_argument('--mutation', help='mutation rate [0.001]', metavar='', default=0.001, type=float)
 	wgsim.add_argument('--indels', help='indels rate [0.15]', metavar='', default=0.15, type=float)
@@ -199,9 +202,9 @@ haplotagging  barcode appended to sequence header via 'BX:Z' tag
 	bc_default = os.path.abspath(os.path.dirname(__file__) + '/XENIA/4M-with-alts-february-2016.txt.gz')
 	molecules.add_argument('-b', '--barcodes', help='file of barcodes to simulate, one per line [10X barcodes]', metavar='FILE', default = bc_default, type=barcodefile)
 	molecules.add_argument('-B', '--barcode-type', help='Type of linked-read experiment [10x]\n{10x, haplotagging, stlfr, tellseq}', metavar='CHOICE', default = "10x", choices = ["10x", "stlfr", "haplotagging", "tellseq"])
-	molecules.add_argument('--molecule_length', help='mean length of molecules [80000]', metavar='', default=80000, type=int)
-	molecules.add_argument('--molecule_number', help='number of fragments per barcode on average [10]', metavar='', default=10, type=int)
-	molecules.add_argument('--molecule_coverage', help='mean coverage per molecule [0.2]', metavar='', default=0.2, type=float)
+	molecules.add_argument('--molecule-length', help='mean length of molecules [80000]', metavar='', default=80000, type=int)
+	molecules.add_argument('--molecule-number', help='number of fragments per barcode on average [10]', metavar='', default=10, type=int)
+	molecules.add_argument('--molecule-coverage', help='if <1, mean coverage per molecule [0.2]\nif >=1, mean number of reads per molecule', metavar='', default=0.2, type=float)
 
 	optional = parser_linkedreads.add_argument_group('Additional parameters')
 

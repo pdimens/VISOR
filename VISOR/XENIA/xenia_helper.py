@@ -14,11 +14,9 @@ from shutil import which
 
 #additional modules
 
-import pybedtools
 import pyfaidx
 from pywgsim import wgsim
 import numpy as np
-
 
 class c():
 
@@ -28,6 +26,7 @@ class c():
 
 	OUT = ''
 	BED = ''
+	PREFIX = ''
 	FASTADIR = ''
 
 	#pywgsim
@@ -58,6 +57,7 @@ class c():
 	molnum=0
 	mollen=0
 	molcov=0
+	molcovdist=None
 	barcodetype=None
 	barcodebp=0
 	barcodes=None	# will be an iterable to use with next()
@@ -65,7 +65,7 @@ class c():
 	used_bc={}
 	totalbarcodes=0
 	remainingbarcodes=0
-	whitelist=None
+	barcodeslist=None
 
 class Molecule(object):
 
@@ -189,36 +189,46 @@ def interpret_barcodes(infile, lr_type):
 		return iter(bc), bc_len, len(bc)
 
 
-def format_linkedread(name, bc, seq, qual):
+def format_linkedread(name, bc, seq, qual, forward: bool):
 	'''
 	Given a linked-read output type, will format the read accordingly and return it
 	'''
 	if c.outformat == "10x":
-		read = [f'@{name}', f"{bc}{seq}", '+', f'{qual[0] * c.barcodebp}{qual}']
+		fr = "1:N:0:ATAGCT" if forward else "2:N:0:ATAGCT"
+		read = [f'@{name} {fr}', f"{bc}{seq}", '+', f'{qual[0] * c.barcodebp}{qual}']
 		if bc not in c.used_bc:
 			c.used_bc[bc] = True
-			c.whitelist.write(f"{bc}\n")
+			c.barcodelist.write(f"{bc}\n")
 	elif c.outformat == "tellseq":
-		read = [f'@{name}:{bc}', seq, '+', qual]
+		fr = "1:N:0:ATAGCT" if forward else "2:N:0:ATAGCT"
+		read = [f'@{name}:{bc} {fr}', seq, '+', qual]
 		if bc not in c.used_bc:
-			c.whitelist.write(f"{bc}\n")
+			c.barcodelist.write(f"{bc}\n")
 			c.used_bc[bc] = True
 	elif c.outformat == "haplotagging":
+		fr = "/1" if forward else "/2"
 		if bc not in c.used_bc:
 			acbd = "".join(next(c.bc_generator))
 			c.used_bc[bc] = acbd
-			c.whitelist.write(f"{bc}\n")
+			c.barcodelist.write(f"{bc}\n")
 		else:
 			acbd = c.used_bc[bc]
-		read = [f'@{name}\tOX:Z:{bc}\tBX:Z:{acbd}', seq, '+', qual]
+		read = [f'@{name}{fr}\tOX:Z:{bc}\tBX:Z:{acbd}', seq, '+', qual]
+	elif c.outformat == "standard":
+		fr = "/1" if forward else "/2"
+		if bc not in c.used_bc:
+			c.used_bc[bc] = bc
+			c.barcodelist.write(f"{bc}\n")
+		read = [f'@{name}{fr}\tBV:i:1\tBX:Z:{bc}', seq, '+', qual]
 	elif c.outformat == "stlfr":
+		fr = "1:N:0:ATAGCT" if forward else "2:N:0:ATAGCT"
 		if bc not in c.used_bc:
 			stlfr_bc = "_".join([str(i) for i in next(c.bc_generator)])
 			c.used_bc[bc] = stlfr_bc
-			c.whitelist.write(f"{bc}\n")
+			c.barcodelist.write(f"{bc}\n")
 		else:
 			stlfr_bc = c.used_bc[bc]
-		read = [f'@{name}#{stlfr_bc}', seq, '+', qual]
+		read = [f'@{name}#{stlfr_bc} {fr}', seq, '+', qual]
 	return read
 
 def randomlong(Par,seq_,EXPM):
@@ -356,10 +366,15 @@ def MolSim(processor,molecule,hfa,w,c):
 		seq__=hfa[w.chrom][w.start+mol.start-1:w.start+mol.end].seq
 
 		truedim=mol.length-seq__.count('N')
-		N=int(truedim*c.molcov)/(c.length*2)
-
-		R1A=os.path.abspath(c.OUT + '/SIM_S1_L' + str(c.hapnumber).zfill(3) + '_R1_001.fastq')
-		R2A=os.path.abspath(c.OUT + '/SIM_S1_L' + str(c.hapnumber).zfill(3) + '_R2_001.fastq')
+		if c.molcov < 1:
+			N = int(truedim*c.molcov)/(c.length*2)
+		else:
+			# draw N from a normal distribution with a mean of molcov and stdev of molcov/3, avoiding < 0
+			N = max(0, int(c.molcovdist.normal(c.molcov, c.molcov/3)))
+			# set ceiling to avoid N being greater than can be sampled
+			N = min(N, int(truedim/(c.length*2)))
+		R1A=os.path.abspath(f'{c.OUT}/{c.PREFIX}_S1_L{c.hapnumber.zfill(3)}_R1_001.fastq')
+		R2A=os.path.abspath(f'{c.OUT}/{c.PREFIX}_S1_L{c.hapnumber.zfill(3)}_R2_001.fastq')
 
 		if N != 0:
 			molfa=os.path.abspath(f'{c.OUT}/{processor}_{moleculenumber}.fa')
@@ -398,7 +413,7 @@ def MolSim(processor,molecule,hfa,w,c):
 
 				with open(R1tmp,'r') as infile, open(R1A,'a') as outfile:
 					for name,seq,qual in readfq(infile):
-						read = format_linkedread(name, barcodestring, seq, qual)
+						read = format_linkedread(name, barcodestring, seq, qual, True)
 						outfile.write('\n'.join(read) + '\n')
 				os.remove(R1tmp)
 
@@ -407,7 +422,7 @@ def MolSim(processor,molecule,hfa,w,c):
 						if c.outformat == "10x":
 							read = [f'@{name}',seq,'+',qual]
 						else:
-							read = format_linkedread(name, barcodestring, seq, qual)
+							read = format_linkedread(name, barcodestring, seq, qual, False)
 						outfile.write('\n'.join(read) + '\n')
 				os.remove(R2)
 
@@ -438,7 +453,7 @@ def LinkedSim(w,c):
 		
 		print(f'[{get_now()}] Number of available barcodes: {c.remainingbarcodes}', file = sys.stderr)
 
-		MRPM=(c.molcov*c.mollen)/(c.length*2)
+		MRPM=(c.molcov*c.mollen)/(c.length*2) if c.molcov < 1 else c.molcov
 		TOTALR=round(((c.regioncoverage*(len(seq_)-Ns))/c.length)/2)
 		EXPM=round(TOTALR/MRPM)
 
